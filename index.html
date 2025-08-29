@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Soniya Dresses — Billing & Inventory (Supabase)</title>
+  <script src="https://unpkg.com/@supabase/supabase-js/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js"></script>
+  <style>
+    /* Minimal modern styling (you can replace with Tailwind or your own CSS) */
+    :root{--accent:#7c3aed;--muted:#666}
+    body{font-family:Inter, system-ui, Arial; margin:0; padding:0; background:#f6f7fb}
+    header{background:linear-gradient(90deg,#fff,#f9f9ff);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+    header h1{margin:0;font-size:18px}
+    .container{padding:20px;max-width:1200px;margin:0 auto}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:18px}
+    .card{background:#fff;border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(12,18,31,.04)}
+    .section-title{font-weight:600;margin-bottom:8px}
+    input,select,textarea,button{padding:10px;border:1px solid #e6e9ef;border-radius:8px;font-size:14px}
+    .muted{color:var(--muted);font-size:13px}
+    .list{max-height:420px;overflow:auto}
+    table{width:100%;border-collapse:collapse}
+    table th,table td{padding:8px;text-align:left;border-bottom:1px solid #f0f0f3}
+    .btn{background:var(--accent);color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(124,58,237,.12)}
+    .small{font-size:13px;padding:6px 8px}
+    .barcode-canvas{width:150px;height:50px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Soniya Dresses — Billing & Inventory</h1>
+      <div class="muted">Address: main road, Pandharkawda</div>
+    </div>
+    <div class="muted">DB: Supabase · Deploy: Netlify</div>
+  </header>
+
+  <main class="container">
+    <div class="grid">
+      <div>
+        <div class="card" id="product-manager">
+          <div class="section-title">Product Management</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="searchProducts" placeholder="Search products by name, barcode, category..." />
+            <button class="btn small" onclick="loadProducts()">Search</button>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:12px">
+            <div style="flex:1">
+              <input id="p_name" placeholder="Product name" />
+            </div>
+            <div style="width:140px"><input id="p_category" placeholder="Category" /></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="p_size" placeholder="Size" style="width:120px" />
+            <input id="p_color" placeholder="Color" style="width:120px" />
+            <input id="p_supplier" placeholder="Supplier" style="flex:1" />
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="p_purchase" type="number" placeholder="Purchase price" />
+            <input id="p_selling" type="number" placeholder="Selling price" />
+            <input id="p_quantity" type="number" placeholder="Quantity" />
+            <input id="p_low" type="number" placeholder="Low-stock threshold" />
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <input id="p_image" type="file" accept="image/*" />
+            <button class="btn small" onclick="addOrUpdateProduct()">Save product</button>
+            <button class="btn ghost small" onclick="clearProductForm()">Clear</button>
+          </div>
+
+          <div class="list" id="productsList"></div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="section-title">Inventory Management</div>
+          <div id="inventoryList"></div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="section-title">Returns</div>
+          <div id="returnsList" class="list"></div>
+        </div>
+
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="section-title">Billing</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="bill_search" placeholder="Search product or scan barcode" />
+            <button class="btn small" onclick="searchAndSuggest()">Add</button>
+            <button class="btn ghost small" onclick="startScanner()">Scan</button>
+          </div>
+          <div id="scanner" style="display:none;margin-bottom:8px"></div>
+          <div id="cartList"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <input id="overall_discount" type="number" placeholder="Overall % discount" style="width:160px" />
+            <button class="btn small" onclick="applyOverallDiscount()">Apply</button>
+            <button class="btn ghost small" onclick="clearCart()">Clear Cart</button>
+          </div>
+          <div style="margin-top:10px" id="totals">Subtotal: 0 · Discount: 0 · Total: 0</div>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="btn" onclick="generateInvoice()">Generate Invoice</button>
+            <button class="btn ghost" onclick="printInvoicePlaceholder()">Print (receipt)</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="section-title">Suppliers</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="s_name" placeholder="Supplier name" />
+            <input id="s_contact" placeholder="Contact person" />
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input id="s_phone" placeholder="Phone/email" />
+            <button class="btn small" onclick="addSupplier()">Add Supplier</button>
+          </div>
+          <div id="suppliersList" class="list"></div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="section-title">Expenses</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <select id="exp_category">
+              <option>Rent</option>
+              <option>Salaries</option>
+              <option>Utilities</option>
+              <option>Supplies</option>
+              <option>Marketing</option>
+              <option>Travel</option>
+              <option>Other</option>
+            </select>
+            <input id="exp_amount" type="number" placeholder="Amount" />
+            <button class="btn small" onclick="addExpense()">Add Expense</button>
+          </div>
+          <div id="expensesList"></div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+          <script src="https://unpkg.com/html5-qrcode"></script>
+  <script type="module">
+    // This is the correct way to import the Supabase module
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+            
+    // Expose functions to the global scope so they can be called from onclick handlers
+    window.addOrUpdateProduct = addOrUpdateProduct;
+    window.clearProductForm = clearProductForm;
+    window.loadProducts = loadProducts;
+    window.renderProducts = renderProducts;
+    window.renderInventory = renderInventory;
+    window.editProduct = editProduct;
+    window.deleteProduct = deleteProduct;
+    window.addSupplier = addSupplier;
+    window.loadSuppliers = loadSuppliers;
+    window.deleteSupplier = deleteSupplier;
+    window.searchAndSuggest = searchAndSuggest;
+    window.addToCart = addToCart;
+    window.renderCart = renderCart;
+    window.updateCartQty = updateCartQty;
+    window.updateCartPrice = updateCartPrice;
+    window.updateCartDiscount = updateCartDiscount;
+    window.removeCartItem = removeCartItem;
+    window.applyOverallDiscount = applyOverallDiscount;
+    window.updateTotals = updateTotals;
+    window.clearCart = clearCart;
+    window.generateInvoice = generateInvoice;
+    window.printInvoicePlaceholder = printInvoicePlaceholder;
+    window.processReturn = processReturn;
+    window.addExpense = addExpense;
+    window.loadExpenses = loadExpenses;
+    window.startScanner = startScanner;
+    window.Html5Qrcode = Html5Qrcode; // Also expose Html5Qrcode to the global scope
+
+    /***************************************************************************
+     * IMPORTANT: Replace the placeholders below with your Supabase project info
+     * 1) SUPABASE_URL  -> Found in your Supabase project settings
+     * 2) SUPABASE_KEY  -> An anon public API key (for client usage). For production
+     * consider using a secure backend for sensitive operations.
+     ***************************************************************************/
+    const SUPABASE_URL = 'https://kfyiujsunruyaerczlmn.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmeWl1anN1bnJ1eWFlcmN6bG1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY0NzI3NzAsImV4cCI6MjA3MjA0ODc3MH0.Q-1pWAsJUsmiA9OnTsFv5Tr2FLV9SgM4RmLmqVu5avM';
+
+    // Initialize supabase client using the imported createClient function
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Basic data model (create these tables in Supabase SQL editor):
+    /*
+    -- products
+    create table products (
+      id uuid primary key default gen_random_uuid(),
+      name text,
+      category text,
+      size text,
+      color text,
+      supplier text,
+      purchase_price numeric,
+      selling_price numeric,
+      quantity int,
+      low_threshold int,
+      image_url text,
+      barcode text unique,
+      created_at timestamptz default now()
+    );
+
+    -- suppliers
+    create table suppliers (
+      id uuid primary key default gen_random_uuid(),
+      name text,
+      contact_person text,
+      phone_email text,
+      created_at timestamptz default now()
+    );
+
+    -- invoices and items
+    create table invoices (
+      id uuid primary key default gen_random_uuid(),
+      invoice_number text unique,
+      created_at timestamptz default now(),
+      subtotal numeric,
+      discount numeric,
+      total numeric
+    );
+
+    create table invoice_items (
+      id uuid primary key default gen_random_uuid(),
+      invoice_id uuid references invoices(id) on delete cascade,
+      product_id uuid,
+      name text,
+      barcode text,
+      qty int,
+      unit_price numeric,
+      discount numeric,
+      line_total numeric
+    );
+
+    -- returns, expenses etc. (similar structure)
+    */
+
+    // Util: generate a simple barcode string (EAN-like) - in production use a robust generator
+    function generateBarcodeString() {
+      // timestamp + random -> unique small string
+      return 'SD' + Date.now().toString().slice(-8) + Math.floor(Math.random()*900+100).toString()
+    }
+
+    // ---- Product CRUD
+    let editingProductId = null
+
+    async function addOrUpdateProduct() {
+      const name = document.getElementById('p_name').value.trim()
+      if(!name) return alert('Name required')
+      const category = document.getElementById('p_category').value
+      const size = document.getElementById('p_size').value
+      const color = document.getElementById('p_color').value
+      const supplier = document.getElementById('p_supplier').value
+      const purchase_price = parseFloat(document.getElementById('p_purchase').value || 0)
+      const selling_price = parseFloat(document.getElementById('p_selling').value || 0)
+      const quantity = parseInt(document.getElementById('p_quantity').value || 0)
+      const low_threshold = parseInt(document.getElementById('p_low').value || 0)
+
+      // upload image if provided
+      const imageInput = document.getElementById('p_image')
+      let image_url = null
+      if(imageInput.files && imageInput.files[0]){
+        const file = imageInput.files[0]
+        const fileExt = file.name.split('.').pop()
+        const filePath = `product-images/${Date.now()}.${fileExt}`
+        const { data, error } = await supabase.storage.from('product-images').upload(filePath, file)
+        if(error){ console.error(error); alert('Image upload failed'); }
+        else{
+          const { publicURL } = supabase.storage.from('product-images').getPublicUrl(filePath)
+          image_url = publicURL
+        }
+      }
+
+      if(editingProductId){
+        // update
+        const updates = { name, category, size, color, supplier, purchase_price, selling_price, quantity, low_threshold }
+        if(image_url) updates.image_url = image_url
+        const { error } = await supabase.from('products').update(updates).eq('id', editingProductId)
+        if(error) return alert('Update failed: ' + error.message)
+        editingProductId = null
+        clearProductForm()
+        loadProducts()
+        return
+      }
+
+      const barcode = generateBarcodeString()
+      const { data, error } = await supabase.from('products').insert([{ name, category, size, color, supplier, purchase_price, selling_price, quantity, low_threshold, image_url, barcode }])
+      if(error) return alert('Insert failed: ' + error.message)
+      clearProductForm()
+      loadProducts()
+    }
+
+    function clearProductForm(){
+      ['p_name','p_category','p_size','p_color','p_supplier','p_purchase','p_selling','p_quantity','p_low','p_image'].forEach(id=>document.getElementById(id).value='')
+      editingProductId = null
+    }
+
+    async function loadProducts(){
+      const q = document.getElementById('searchProducts').value || ''
+      let query = supabase.from('products').select('*').order('created_at',{ascending:false})
+      if(q) query = query.ilike('name', `%${q}%`)
+      const { data, error } = await query
+      if(error) return console.error(error)
+      renderProducts(data || [])
+      renderInventory(data || [])
+    }
+
+    function renderProducts(items){
+      const container = document.getElementById('productsList')
+      if(!items.length) { container.innerHTML = '<div class="muted">No products</div>'; return }
+      container.innerHTML = items.map(p=>`
+        <div style="display:flex;gap:10px;align-items:center;padding:8px;border-bottom:1px solid #f3f3f6">
+          <div style="width:60px;height:60px;border-radius:6px;background:#fafafa;display:flex;align-items:center;justify-content:center">
+            ${p.image_url?`<img src="${p.image_url}" style="max-width:100%;max-height:100%;border-radius:6px"/>`:`<svg width=36 height=36><rect width=36 height=36 fill="#f0f0f2" rx=6 /></svg>`}
+          </div>
+          <div style="flex:1">
+            <div style="font-weight:600">${escapeHtml(p.name)}</div>
+            <div class="muted">${escapeHtml(p.category)} · ${escapeHtml(p.size)} · ${escapeHtml(p.color)}</div>
+            <div class="muted">Barcode: ${escapeHtml(p.barcode)}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="muted">Qty: ${p.quantity}</div>
+            <div style="margin-top:6px">
+              <button class="small" onclick="editProduct('${p.id}')">Edit</button>
+              <button class="small" onclick="deleteProduct('${p.id}')">Delete</button>
+              <svg class="barcode-canvas" id="bc-${p.id}"></svg>
+            </div>
+          </div>
+        </div>
+      `).join('')
+
+      // render barcode svgs after adding to DOM
+      items.forEach(p=>{
+        try{ JsBarcode(`#bc-${p.id}`, p.barcode, {format:'CODE128', height:30, displayValue:false}) }catch(e){}
+      })
+    }
+
+    function renderInventory(items){
+      const container = document.getElementById('inventoryList')
+      if(!items.length){ container.innerHTML = '<div class="muted">No inventory</div>'; return }
+      const rows = items.map(p=>{
+        const status = p.quantity <=0 ? 'Out of Stock' : (p.quantity <= (p.low_threshold||0) ? 'Low Stock' : 'In Stock')
+        const value = (p.quantity||0) * (p.selling_price||0)
+        return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f6f6f8"><div>${escapeHtml(p.name)} <div class="muted">${escapeHtml(p.category)}</div></div><div class="muted">${p.barcode}</div><div>${p.quantity}</div><div class="muted">₹${value.toFixed(2)}</div><div style="font-weight:600">${status}</div></div>`
+      }).join('')
+      container.innerHTML = rows
+    }
+
+    async function editProduct(id){
+      const { data, error } = await supabase.from('products').select('*').eq('id', id).single()
+      if(error) return alert('Fetch product failed')
+      editingProductId = id
+      document.getElementById('p_name').value = data.name
+      document.getElementById('p_category').value = data.category
+      document.getElementById('p_size').value = data.size
+      document.getElementById('p_color').value = data.color
+      document.getElementById('p_supplier').value = data.supplier
+      document.getElementById('p_purchase').value = data.purchase_price
+      document.getElementById('p_selling').value = data.selling_price
+      document.getElementById('p_quantity').value = data.quantity
+      document.getElementById('p_low').value = data.low_threshold
+      window.scrollTo({top:0, behavior:'smooth'})
+    }
+
+    async function deleteProduct(id){
+      if(!confirm('Delete this product?')) return
+      const { error } = await supabase.from('products').delete().eq('id', id)
+      if(error) return alert('Delete failed')
+      loadProducts()
+    }
+
+    // ---- Suppliers
+    async function addSupplier(){
+      const name = document.getElementById('s_name').value.trim()
+      if(!name) return alert('Supplier name required')
+      const contact_person = document.getElementById('s_contact').value
+      const phone_email = document.getElementById('s_phone').value
+      const { error } = await supabase.from('suppliers').insert([{ name, contact_person, phone_email }])
+      if(error) return alert('Add supplier failed')
+      document.getElementById('s_name').value=''
+      loadSuppliers()
+    }
+
+    async function loadSuppliers(){
+      const { data } = await supabase.from('suppliers').select('*').order('created_at',{ascending:false})
+      const container = document.getElementById('suppliersList')
+      if(!data || !data.length) return container.innerHTML = '<div class="muted">No suppliers</div>'
+      container.innerHTML = data.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f6f6f8"><div><b>${escapeHtml(s.name)}</b><div class="muted">${escapeHtml(s.contact_person)} · ${escapeHtml(s.phone_email)}</div></div><div><button class="small" onclick="deleteSupplier('${s.id}')">Delete</button></div></div>`).join('')
+    }
+    async function deleteSupplier(id){ if(!confirm('Delete supplier?')) return; await supabase.from('suppliers').delete().eq('id',id); loadSuppliers() }
+
+    // ---- Billing / Cart
+    let CART = []
+    function escapeHtml(s){ if(!s) return ''; return String(s).replace(/[&<>\"']/g, function(m){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m] }) }
+
+    async function searchAndSuggest(){
+      const q = document.getElementById('bill_search').value.trim()
+      if(!q) return alert('Enter product name or barcode')
+      // search by barcode exact or name ilike
+      let res = await supabase.from('products').select('*').or(`barcode.eq.${q},name.ilike.%${q}%`).limit(20)
+      if(res.error) return console.error(res.error)
+      const items = res.data || []
+      if(!items.length) return alert('No product found')
+      // use first match
+      addToCart(items[0])
+    }
+
+    function addToCart(product){
+      // if exists increment
+      const idx = CART.findIndex(c=>c.product_id===product.id)
+      if(idx>=0){ CART[idx].qty += 1 }
+      else CART.push({ product_id: product.id, name: product.name, barcode: product.barcode, unit_price: product.selling_price, qty:1, discount:0 })
+      renderCart()
+    }
+
+    function renderCart(){
+      const container = document.getElementById('cartList')
+      if(!CART.length){ container.innerHTML = '<div class="muted">Cart is empty</div>'; updateTotals(); return }
+      container.innerHTML = CART.map((c,i)=>`<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f6f6f8"><div><b>${escapeHtml(c.name)}</b><div class="muted">${escapeHtml(c.barcode)}</div></div><div style="display:flex;gap:8px;align-items:center"><input type=number value=${c.qty} min=1 style="width:72px" onchange="updateCartQty(${i},this.value)" /><input type=number value=${c.unit_price} style="width:90px" onchange="updateCartPrice(${i},this.value)"/><input type=number value=${c.discount} style="width:80px" onchange="updateCartDiscount(${i},this.value)"/> <button class="small" onclick="removeCartItem(${i})">Remove</button></div></div>`).join('')
+      updateTotals()
+    }
+
+    async function updateCartQty(i, v){ CART[i].qty = parseInt(v) || 1; renderCart() }
+    function updateCartPrice(i,v){ CART[i].unit_price = parseFloat(v)||0; renderCart() }
+    function updateCartDiscount(i,v){ CART[i].discount = parseFloat(v)||0; renderCart() }
+    function removeCartItem(i){ CART.splice(i,1); renderCart() }
+    function applyOverallDiscount(){ const d = parseFloat(document.getElementById('overall_discount').value||0); // distribute proportionally
+      const subtotal = CART.reduce((s,c)=>s + (c.unit_price*c.qty),0)
+      if(subtotal<=0) return
+      CART = CART.map(c=>{ const line = c.unit_price*c.qty; const frac = line/subtotal; const discAmount = (subtotal * (d/100)) * frac; const perItemDisc = discAmount / c.qty; c.discount = perItemDisc; return c })
+      renderCart()
+    }
+
+    function updateTotals(){
+      const subtotal = CART.reduce((s,c)=>s + (c.unit_price*c.qty),0)
+      const discount = CART.reduce((s,c)=>s + (c.discount*c.qty),0)
+      const total = subtotal - discount
+      document.getElementById('totals').innerText = `Subtotal: ₹${subtotal.toFixed(2)} · Discount: ₹${discount.toFixed(2)} · Total: ₹${total.toFixed(2)}`
+    }
+
+    function clearCart(){ if(!confirm('Clear cart?')) return; CART = []; renderCart() }
+
+    async function generateInvoice(){
+      if(!CART.length) return alert('Cart empty')
+      const subtotal = CART.reduce((s,c)=>s + (c.unit_price*c.qty),0)
+      const discount = CART.reduce((s,c)=>s + (c.discount*c.qty),0)
+      const total = subtotal - discount
+      // generate invoice_number
+      const invoice_number = 'INV-' + Date.now().toString().slice(-8)
+      const { data:inv, error:invErr } = await supabase.from('invoices').insert([{ invoice_number, subtotal, discount, total }]).select().single()
+      if(invErr) return alert('Invoice creation failed')
+      // insert items
+      const itemsToInsert = CART.map(c=>({ invoice_id: inv.id, product_id: c.product_id, name: c.name, barcode: c.barcode, qty: c.qty, unit_price: c.unit_price, discount: c.discount, line_total: (c.unit_price*c.qty) - (c.discount*c.qty) }))
+      const { error:itemsErr } = await supabase.from('invoice_items').insert(itemsToInsert)
+      if(itemsErr) return alert('Saving items failed')
+
+      // decrement stock
+      for(const c of CART){
+        await supabase.from('products').update({ quantity: supabase.raw('quantity - ?', [c.qty]) }).eq('id', c.product_id).limit(1)
+      }
+
+      alert('Invoice generated: ' + inv.invoice_number)
+      // clear cart and reload products
+      CART = []
+      renderCart()
+      loadProducts()
+    }
+
+    function printInvoicePlaceholder(){
+      // In production you'd open a clean printable receipt view. For now: simple window.print
+      window.print()
+    }
+
+    // ---- Returns (simple placeholder implementation)
+    async function processReturn(invoice_id, product_id, qty, reason){
+      // increase stock and save return record (not fully implemented)
+      await supabase.from('products').update({ quantity: supabase.raw('quantity + ?', [qty]) }).eq('id', product_id)
+      // create credit note table/record - placeholder
+      loadProducts()
+      alert('Return processed and stock updated')
+    }
+
+    // ---- Expenses
+    async function addExpense(){
+      const cat = document.getElementById('exp_category').value
+      const amount = parseFloat(document.getElementById('exp_amount').value||0)
+      if(!amount) return alert('Amount required')
+      // create expenses table separately; here we just store in a generic table named expenses
+      await supabase.from('expenses').insert([{ category:cat, amount }])
+      document.getElementById('exp_amount').value=''
+      loadExpenses()
+    }
+    async function loadExpenses(){ const { data } = await supabase.from('expenses').select('*').order('created_at',{ascending:false}); const container = document.getElementById('expensesList'); if(!data||!data.length) container.innerHTML='<div class="muted">No expenses</div>'; else container.innerHTML = data.map(e=>`<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #f6f6f8"><div><b>${escapeHtml(e.category)}</b><div class="muted">${escapeHtml(e.description||'')}</div></div><div>₹${e.amount}</div></div>`).join('') }
+
+    // ---- Barcode scanner (camera-based) using html5-qrcode
+    let html5QrcodeScanner = null
+    function startScanner(){
+      const scannerEl = document.getElementById('scanner')
+      scannerEl.style.display = 'block'
+      if(html5QrcodeScanner) return
+      // FIX: Use the correct class name "Html5Qrcode"
+      html5QrcodeScanner = new Html5Qrcode("scanner")
+      // FIX: `Html5Qrcode` needs to be in the global scope. This is handled by a fix at the top of the script block.
+      Html5Qrcode.getCameras().then(cameras=>{
+        if(cameras && cameras.length){
+          const cameraId = cameras[0].id
+          html5QrcodeScanner.start(cameraId, { fps: 10, qrbox: 250 }, decodedText => {
+            // treat decodedText as barcode
+            document.getElementById('bill_search').value = decodedText
+            searchAndSuggest()
+            // stop scanner after scan
+            html5QrcodeScanner.stop()
+            html5QrcodeScanner = null
+            document.getElementById('scanner').style.display='none'
+          }, err=>{})
+        }
+      }).catch(err=>{ alert('Camera access error: ' + err) })
+    }
+
+    // ---- Utility: on load
+    window.addEventListener('load', ()=>{
+      loadProducts()
+      loadSuppliers()
+      loadExpenses()
+    })
+
+  </script>
+
+</body>
+</html>
